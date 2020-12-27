@@ -18,7 +18,7 @@
 #define EM_GET_COMPONENTS(name, array) \
     em_get_components(#name, array)
 
-struct {
+static struct {
     array_t entities;
     hash_t components;
 } em;
