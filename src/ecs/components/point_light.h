@@ -1,6 +1,7 @@
 #ifndef ROGUELIKE_POINT_LIGHT_H
 #define ROGUELIKE_POINT_LIGHT_H
 
+#include <stddef.h>
 #include "../../math/types.h"
 
 typedef struct {

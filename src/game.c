@@ -1,3 +1,4 @@
+#include <glad/glad.h>
 #include <malloc.h>
 #include "game.h"
 #include "render.h"
@@ -31,7 +32,7 @@ static uint32_t book_fire_texture;
 
 // Shaders
 static uint32_t g_buffer_shader_program;
-static uint32_t default_shader_program;
+static uint32_t point_light_shader_program;
 
 static void create_spectator() {
     size_t spectator_id = em_create_entity();
@@ -125,11 +126,11 @@ void game_launch(GLFWwindow *window) {
     create_spectator();
 
     mesh_t plane_mesh;
-    plane_create(&plane_mesh, 10.f);
+    plane_create(&plane_mesh, 100.f);
     create_model(
             (vec3) {0.f, 0.f, 0.f},
             (vec3) {0.f, 0.f, 0.f},
-            (vec3) {10.f, 10.f, 10.f},
+            (vec3) {100.f, 100.f, 100.f},
             &plane_mesh,
             tiles_texture
     );
@@ -169,10 +170,10 @@ void game_launch(GLFWwindow *window) {
             book_fire_texture
     );
 
-    //for (int i = 0; i < 10; i++) {
-        //create_point_light((vec3) {16.f, 26.f, 24.f}, (vec3) {1.f, 1.f, 1.f});
-        create_point_light((vec3) {4.f, 5.f, 3.f}, (vec3) {1.f, 1.f, 1.f});
-   // }
+    create_point_light((vec3) {5.f, 5.f, 0.f}, (vec3) {1.f, 1.f, 1.f});
+    create_point_light((vec3) {-5.f, 5.f, 0.f}, (vec3) {1.f, 1.f, 1.f});
+    create_point_light((vec3) {0.f, 5.f, 5.f}, (vec3) {1.f, 1.f, 1.f});
+    create_point_light((vec3) {0.f, 5.f, -5.f}, (vec3) {1.f, 1.f, 1.f});
 
     // Create shader programs
     g_buffer_shader_program = shader_create_program_f(
@@ -180,16 +181,16 @@ void game_launch(GLFWwindow *window) {
             "../res/shaders/g_buffer_fragment.glsl"
     );
 
-    default_shader_program = shader_create_program_f(
-            "../res/shaders/default_vertex.glsl",
-            "../res/shaders/default_fragment.glsl"
+    point_light_shader_program = shader_create_program_f(
+            "../res/shaders/point_light_vertex.glsl",
+            "../res/shaders/point_light_fragment.glsl"
     );
 
     // Default shader configuration
-    glUseProgram(default_shader_program);
-    shader_set_int(default_shader_program, "g_position", 0);
-    shader_set_int(default_shader_program, "g_normal", 1);
-    shader_set_int(default_shader_program, "g_albedo_spec", 2);
+    glUseProgram(point_light_shader_program);
+    shader_set_int(point_light_shader_program, "g_position", 0);
+    shader_set_int(point_light_shader_program, "g_normal", 1);
+    shader_set_int(point_light_shader_program, "g_albedo_spec", 2);
 
     float last_time = (float) glfwGetTime();
     while (!glfwWindowShouldClose(game_window)) {
@@ -226,11 +227,13 @@ void game_update(float dt) {
 }
 
 void game_draw() {
-    glClearColor(0.2f, 0.2f, 0.3f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
 
     // 1. Geometry pass: render scene's geometry/color data into g-buffer
     glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.id);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(g_buffer_shader_program);
@@ -273,8 +276,10 @@ void game_draw() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // 2. Lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the g-buffer's content.
+    glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(default_shader_program);
+
+    glUseProgram(point_light_shader_program);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_buffer.g_position);
     glActiveTexture(GL_TEXTURE1);
@@ -282,14 +287,10 @@ void game_draw() {
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, g_buffer.g_albedo_spec);
 
-    // Send light relevant uniforms
-    array_t point_lights;
-    array_create(&point_lights);
-    EM_GET_COMPONENTS(point_light_t, &point_lights);
-    for (size_t i = 0; i < point_lights.size; i++) {
-        point_light_t *point_light = array_get(&point_lights, i);
-        point_light_draw(point_light, default_shader_program, i);
-    }
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
     for (size_t i = 0; i < cameras.size; i++) {
         camera_t *camera = array_get(&cameras, i);
         if (camera->active) {
@@ -297,19 +298,28 @@ void game_draw() {
             if (transform != NULL) {
                 transform_t world_transform;
                 transform_to_world(transform, &world_transform);
-                shader_set_vec3(default_shader_program, "view_pos", world_transform.position);
+                shader_set_vec3(point_light_shader_program, "view_pos", world_transform.position);
             }
             break;
         }
     }
+
+    // Send light relevant uniforms
+    array_t point_lights;
+    array_create(&point_lights);
+    EM_GET_COMPONENTS(point_light_t, &point_lights);
+    for (size_t i = 0; i < point_lights.size; i++) {
+        point_light_t *point_light = array_get(&point_lights, i);
+        point_light_draw(point_light, point_light_shader_program);
+        render_draw_quad();
+    }
+
     free(cameras.array);
     free(point_lights.array);
-
-    render_draw_quad();
 }
 
 void game_destroy() {
     em_free();
-    glDeleteProgram(default_shader_program);
+    glDeleteProgram(point_light_shader_program);
     glDeleteProgram(g_buffer_shader_program);
 }
