@@ -311,7 +311,6 @@ void game_draw() {
     for (size_t i = 0; i < point_lights.size; i++) {
         point_light_t *point_light = array_get(&point_lights, i);
         point_light_draw(point_light, point_light_shader_program);
-        render_draw_quad();
     }
 
     free(cameras.array);
