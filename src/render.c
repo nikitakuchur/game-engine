@@ -1,7 +1,25 @@
 #include "render.h"
 
+#include "shader.h"
+#include "utils/array.h"
+#include "ecs/em.h"
+#include "ecs/components/camera.h"
+#include "math/mat4.h"
+#include "ecs/components/transform.h"
+#include "ecs/systems/camera_sys.h"
+#include "ecs/components/mesh_renderer.h"
+#include "ecs/systems/transform_sys.h"
+#include "ecs/systems/mesh_renderer_sys.h"
+#include "ecs/components/amb_light.h"
+#include "ecs/systems/amb_light_sys.h"
+#include "ecs/components/dir_light.h"
+#include "ecs/systems/dir_light_sys.h"
+#include "ecs/components/point_light.h"
+#include "ecs/systems/point_light_sys.h"
+
 #include <glad/glad.h>
 #include <stdio.h>
+#include <malloc.h>
 
 g_buffer_t render_create_g_buffer(int scr_width, int scr_height) {
     g_buffer_t g_buffer;
@@ -52,6 +70,131 @@ g_buffer_t render_create_g_buffer(int scr_width, int scr_height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     return g_buffer;
+}
+
+void render_setup_shader(uint32_t shader) {
+    glUseProgram(shader);
+    shader_set_int(shader, "g_position", 0);
+    shader_set_int(shader, "g_normal", 1);
+    shader_set_int(shader, "g_albedo_spec", 2);
+}
+
+void render_geometry_pass(g_buffer_t g_buffer, uint32_t g_buffer_shader_program, GLFWwindow *window) {
+    glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.id);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(g_buffer_shader_program);
+
+    // Camera setup
+    array_t cameras;
+    array_create(&cameras);
+    EM_GET_COMPONENTS(camera_t, &cameras);
+    for (size_t i = 0; i < cameras.size; i++) {
+        camera_t *camera = array_get(&cameras, i);
+        if (camera->active) {
+            mat4 view = MAT4_IDENTITY_INIT;
+            mat4 projection = MAT4_IDENTITY_INIT;
+
+            transform_t *transform = EM_GET_COMPONENT(transform_t, camera->entity_id);
+            camera_update(transform, window, view, projection);
+
+            shader_set_mat4(g_buffer_shader_program, "view", view);
+            shader_set_mat4(g_buffer_shader_program, "projection", projection);
+            break;
+        }
+    }
+    free(cameras.array);
+
+    // Draw meshes
+    array_t renderers;
+    array_create(&renderers);
+    EM_GET_COMPONENTS(mesh_renderer_t, &renderers);
+    for (size_t i = 0; i < renderers.size; i++) {
+        mesh_renderer_t *renderer = array_get(&renderers, i);
+
+        mat4 model = MAT4_IDENTITY_INIT;
+        transform_t *transform = EM_GET_COMPONENT(transform_t, renderer->entity_id);
+        transform_update(transform, model);
+
+        shader_set_mat4(g_buffer_shader_program, "model", model);
+        mesh_renderer_draw(renderer);
+    }
+    free(renderers.array);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_bind_g_buffer_to_shader(g_buffer_t g_buffer, uint32_t shader) {
+    glUseProgram(shader);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, g_buffer.g_position);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, g_buffer.g_normal);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, g_buffer.g_albedo_spec);
+}
+
+void render_setup_view_pos(uint32_t shader) {
+    array_t cameras;
+    array_create(&cameras);
+    EM_GET_COMPONENTS(camera_t, &cameras);
+
+    glUseProgram(shader);
+    for (size_t i = 0; i < cameras.size; i++) {
+        camera_t *camera = array_get(&cameras, i);
+        if (camera->active) {
+            transform_t *transform = EM_GET_COMPONENT(transform_t, camera->entity_id);
+            if (transform != NULL) {
+                transform_t world_transform;
+                transform_to_world(transform, &world_transform);
+                shader_set_vec3(shader, "view_pos", world_transform.position);
+            }
+            break;
+        }
+    }
+
+    free(cameras.array);
+}
+
+void render_draw_amb_lights(uint32_t amb_light_shader_program) {
+    glUseProgram(amb_light_shader_program);
+
+    // Send light relevant uniforms
+    array_t amb_lights;
+    array_create(&amb_lights);
+    EM_GET_COMPONENTS(amb_light_t, &amb_lights);
+    for (size_t i = 0; i < amb_lights.size; i++) {
+        amb_light_t *amb_light = array_get(&amb_lights, i);
+        amb_light_draw(amb_light, amb_light_shader_program);
+    }
+    free(amb_lights.array);
+}
+
+void render_draw_dir_lights(uint32_t dir_light_shader_program) {
+    glUseProgram(dir_light_shader_program);
+
+    array_t dir_lights;
+    array_create(&dir_lights);
+    EM_GET_COMPONENTS(dir_light_t, &dir_lights);
+    for (size_t i = 0; i < dir_lights.size; i++) {
+        dir_light_t *dir_light = array_get(&dir_lights, i);
+        dir_light_draw(dir_light, dir_light_shader_program);
+    }
+    free(dir_lights.array);
+}
+
+void render_draw_point_lights(uint32_t point_light_shader_program) {
+    glUseProgram(point_light_shader_program);
+
+    array_t point_lights;
+    array_create(&point_lights);
+    EM_GET_COMPONENTS(point_light_t, &point_lights);
+    for (size_t i = 0; i < point_lights.size; i++) {
+        point_light_t *point_light = array_get(&point_lights, i);
+        point_light_draw(point_light, point_light_shader_program);
+    }
+    free(point_lights.array);
 }
 
 void render_draw_quad() {
