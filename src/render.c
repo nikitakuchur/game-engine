@@ -79,32 +79,6 @@ void render_setup_shader(uint32_t shader) {
     shader_set_int(shader, "g_albedo_spec", 2);
 }
 
-depth_map_t render_create_depth_map(uint32_t size) {
-    depth_map_t depth_map;
-    depth_map.size = size;
-    glGenFramebuffers(1, &depth_map.id);
-
-    // Create depth texture
-    glGenTextures(1, &depth_map.texture);
-    glBindTexture(GL_TEXTURE_2D, depth_map.texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, depth_map.size, depth_map.size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-
-    // Attach depth texture
-    glBindFramebuffer(GL_FRAMEBUFFER, depth_map.id);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_map.texture, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    return depth_map;
-}
-
 void render_setup_cameras(uint32_t shader, GLFWwindow *window) {
     array_t cameras;
     array_create(&cameras);
@@ -153,7 +127,7 @@ void render_bind_g_buffer_to_shader(g_buffer_t g_buffer, uint32_t shader) {
     glBindTexture(GL_TEXTURE_2D, g_buffer.g_albedo_spec);
 }
 
-void render_setup_view_pos(uint32_t shader) {
+static void setup_view_pos(uint32_t shader) {
     array_t cameras;
     array_create(&cameras);
     EM_GET_COMPONENTS(camera_t, &cameras);
@@ -189,7 +163,27 @@ void render_draw_amb_lights(uint32_t amb_light_shader_program) {
     free(amb_lights.array);
 }
 
+void render_draw_dir_light_shadow_maps(uint32_t shadow_depth_shader_program) {
+    int viewport[4];
+    glGetIntegerv( GL_VIEWPORT, viewport);
+
+    glUseProgram(shadow_depth_shader_program);
+
+    array_t dir_lights;
+    array_create(&dir_lights);
+    EM_GET_COMPONENTS(dir_light_t, &dir_lights);
+    for (size_t i = 0; i < dir_lights.size; i++) {
+        dir_light_t *dir_light = array_get(&dir_lights, i);
+        dir_light_draw_shadow_map(dir_light, shadow_depth_shader_program);
+    }
+    free(dir_lights.array);
+
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+}
+
 void render_draw_dir_lights(uint32_t dir_light_shader_program) {
+    setup_view_pos(dir_light_shader_program);
+
     glUseProgram(dir_light_shader_program);
 
     array_t dir_lights;
@@ -197,12 +191,16 @@ void render_draw_dir_lights(uint32_t dir_light_shader_program) {
     EM_GET_COMPONENTS(dir_light_t, &dir_lights);
     for (size_t i = 0; i < dir_lights.size; i++) {
         dir_light_t *dir_light = array_get(&dir_lights, i);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, dir_light->depth_map_texture);
         dir_light_draw(dir_light, dir_light_shader_program);
     }
     free(dir_lights.array);
 }
 
 void render_draw_point_lights(uint32_t point_light_shader_program) {
+    setup_view_pos(point_light_shader_program);
+
     glUseProgram(point_light_shader_program);
 
     array_t point_lights;

@@ -8,6 +8,9 @@ typedef struct {
     size_t entity_id;
     vec3 color;
 
+    uint32_t depth_map_id;
+    uint32_t depth_map_size;
+    uint32_t depth_map_texture;
     mat4 light_space_mat;
 } dir_light_t;
 

@@ -6,7 +6,33 @@
 #include "../../math/cam.h"
 #include "../../math/affine.h"
 
-void dir_light_draw_shadow_map(dir_light_t *dir_light, uint32_t shader, depth_map_t depth_map) {
+static void create_shadow_map(dir_light_t *dir_light) {
+    glGenFramebuffers(1, &dir_light->depth_map_id);
+
+    // Create depth texture
+    glGenTextures(1, &dir_light->depth_map_texture);
+    glBindTexture(GL_TEXTURE_2D, dir_light->depth_map_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, dir_light->depth_map_size, dir_light->depth_map_size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    // Attach depth texture
+    glBindFramebuffer(GL_FRAMEBUFFER, dir_light->depth_map_id);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, dir_light->depth_map_texture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void dir_light_draw_shadow_map(dir_light_t *dir_light, uint32_t shader) {
+    if (dir_light->depth_map_id == 0) {
+        create_shadow_map(dir_light);
+    }
+
     vec3 pos = {0.f, 0.f, 0.f};
     vec3 rot = {0.f, 0.f, 0.f};
 
@@ -34,8 +60,8 @@ void dir_light_draw_shadow_map(dir_light_t *dir_light, uint32_t shader, depth_ma
     shader_set_mat4(shader, "light_space_mat", light_space_mat);
     mat4_copy(light_space_mat, dir_light->light_space_mat);
 
-    glViewport(0, 0, depth_map.size, depth_map.size);
-    glBindFramebuffer(GL_FRAMEBUFFER, depth_map.id);
+    glViewport(0, 0, dir_light->depth_map_size, dir_light->depth_map_size);
+    glBindFramebuffer(GL_FRAMEBUFFER, dir_light->depth_map_id);
     glClear(GL_DEPTH_BUFFER_BIT);
     render_draw_meshes(shader);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

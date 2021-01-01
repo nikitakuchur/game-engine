@@ -19,8 +19,6 @@
 static GLFWwindow *game_window;
 static g_buffer_t g_buffer;
 
-static depth_map_t depth_map;
-
 // Textures
 static uint32_t empty_texture;
 static uint32_t tiles_texture;
@@ -127,10 +125,10 @@ void game_launch(GLFWwindow *window) {
     );
 
     create_amb_light((vec3) {0.4f, 0.4f, 0.4f});
-    create_dir_light((vec3) {rad(-50.f), rad(30.f), rad(0.f)}, (vec3) {0.8f, 0.8f, 0.8f});
-    create_point_light((vec3) {5.f, 5.f, 0.f}, (vec3) {1.f, 0.f, 0.f});
-    create_point_light((vec3) {-5.f, 5.f, 0.f}, (vec3) {0.f, 1.f, 0.f});
-    create_point_light((vec3) {0.f, 5.f, -5.f}, (vec3) {0.f, 0.f, 1.f});
+    create_dir_light((vec3) {rad(-50.f), rad(30.f), rad(0.f)}, (vec3) {0.9f, 0.9f, 0.9f});
+    //create_point_light((vec3) {5.f, 5.f, 0.f}, (vec3) {1.f, 0.f, 0.f});
+    //create_point_light((vec3) {-5.f, 5.f, 0.f}, (vec3) {0.f, 1.f, 0.f});
+    //create_point_light((vec3) {0.f, 5.f, -5.f}, (vec3) {0.f, 0.f, 1.f});
 
     // Create shader programs
     g_buffer_shader_program = shader_create_program_f(
@@ -157,8 +155,6 @@ void game_launch(GLFWwindow *window) {
             "../res/shaders/point_light_vertex.glsl",
             "../res/shaders/point_light_fragment.glsl"
     );
-
-    depth_map = render_create_depth_map(2048);
 
     // Default shaders configuration
     render_setup_shader(amb_light_shader_program);
@@ -208,18 +204,8 @@ void game_draw() {
     // 0. Render depth of scene to texture (from light's perspective)
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(shadow_depth_shader_program);
 
-    array_t dir_lights;
-    array_create(&dir_lights);
-    EM_GET_COMPONENTS(dir_light_t, &dir_lights);
-    for (size_t i = 0; i < dir_lights.size; i++) {
-        dir_light_t *dir_light = array_get(&dir_lights, i);
-        dir_light_draw_shadow_map(dir_light, shadow_depth_shader_program, depth_map);
-    }
-    free(dir_lights.array);
-
-    glViewport(0, 0, 1280, 720);
+    render_draw_dir_light_shadow_maps(shadow_depth_shader_program);
 
     // 1. Geometry pass: render scene's geometry/color data into g-buffer
     glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.id);
@@ -232,36 +218,32 @@ void game_draw() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // 2. Lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the g-buffer's content.
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     render_bind_g_buffer_to_shader(g_buffer, amb_light_shader_program);
     render_bind_g_buffer_to_shader(g_buffer, dir_light_shader_program);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, depth_map.texture);
     render_bind_g_buffer_to_shader(g_buffer, point_light_shader_program);
-
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
     // Ambient lights
     render_draw_amb_lights(amb_light_shader_program);
 
     // Directional lights
-    render_setup_view_pos(dir_light_shader_program);
     render_draw_dir_lights(dir_light_shader_program);
 
     // Point lights
-    render_setup_view_pos(point_light_shader_program);
     render_draw_point_lights(point_light_shader_program);
 }
 
 void game_destroy() {
     em_free();
+    glDeleteProgram(g_buffer_shader_program);
+    glDeleteProgram(shadow_depth_shader_program);
     glDeleteProgram(amb_light_shader_program);
     glDeleteProgram(dir_light_shader_program);
     glDeleteProgram(point_light_shader_program);
-    glDeleteProgram(shadow_depth_shader_program);
-    glDeleteProgram(g_buffer_shader_program);
 }

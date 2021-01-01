@@ -87,6 +87,9 @@ void create_dir_light(vec3 rotation, vec3 color) {
     dir_light_t *dir_light = malloc(sizeof(dir_light_t));
     vec3_copy(dir_light->color, color);
     mat4_identity(dir_light->light_space_mat);
+    dir_light->depth_map_id = 0;
+    dir_light->depth_map_size = 2048;
+    dir_light->depth_map_texture = 0;
     EM_ADD_COMPONENT(dir_light_t, dir_light_id, dir_light);
 }
 
