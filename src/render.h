@@ -13,11 +13,22 @@ typedef struct g_buffer {
     uint32_t g_albedo_spec;
 } g_buffer_t;
 
+typedef struct depth_map {
+    uint32_t id;
+
+    uint32_t size;
+    uint32_t texture;
+} depth_map_t;
+
 g_buffer_t render_create_g_buffer(int scr_width, int scr_height);
 
 void render_setup_shader(uint32_t shader);
 
-void render_geometry_pass(g_buffer_t g_buffer, uint32_t g_buffer_shader_program, GLFWwindow *window);
+depth_map_t render_create_depth_map();
+
+void render_setup_cameras(uint32_t shader, GLFWwindow *window);
+
+void render_draw_meshes(uint32_t shader);
 
 void render_bind_g_buffer_to_shader(g_buffer_t g_buffer, uint32_t shader);
 

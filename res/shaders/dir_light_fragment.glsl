@@ -8,6 +8,9 @@ uniform sampler2D g_position;
 uniform sampler2D g_normal;
 uniform sampler2D g_albedo_spec;
 
+uniform sampler2D shadow_map;
+uniform mat4 light_space_mat;
+
 struct Light {
     vec3 dir;
     vec3 color;
@@ -15,6 +18,25 @@ struct Light {
 
 uniform Light light;
 uniform vec3 view_pos;
+
+float calculate_shadow(vec4 frag_pos_light_space, float bias) {
+    // Perform perspective divide
+    vec3 proj_coords = frag_pos_light_space.xyz / frag_pos_light_space.w;
+    // Transform to [0,1] range
+    proj_coords = proj_coords * 0.5 + 0.5;
+    // Get closest depth value from light's perspective (using [0,1] range frag_pos_light as coords)
+    float closest_depth = texture(shadow_map, proj_coords.xy).r;
+    // Get depth of current fragment from light's perspective
+    float current_depth = proj_coords.z;
+    // Check whether current frag pos is in shadow
+    float shadow = current_depth - bias > closest_depth ? 1.0 : 0.0;
+
+    if (proj_coords.z > 1.0) {
+        return 0.0;
+    }
+
+    return shadow;
+}
 
 void main() {
     // Retrieve data from g-buffer
@@ -33,7 +55,10 @@ void main() {
     float s = pow(max(dot(normal, reflect_dir), 0.0), 16.0);
     vec3 spec = light.color * s * specular;
 
-    vec3 lighting = diff + spec;
+    // Calculate shadow
+    float shadow = calculate_shadow(light_space_mat * vec4(frag_pos, 1.0), 0.01);
+
+    vec3 lighting = (1.0 - shadow) * (diff + spec) * light.color;
 
     frag_color = vec4(lighting, 1.0);
 }

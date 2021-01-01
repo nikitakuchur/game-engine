@@ -12,11 +12,14 @@
 #include "ecs/components/camera.h"
 #include "ecs/components/spectator.h"
 #include "ecs/systems/spectator_sys.h"
-#include "ecs/components/amb_light.h"
 #include "entities.h"
+#include "ecs/components/dir_light.h"
+#include "ecs/systems/dir_light_sys.h"
 
 static GLFWwindow *game_window;
 static g_buffer_t g_buffer;
+
+static depth_map_t depth_map;
 
 // Textures
 static uint32_t empty_texture;
@@ -26,6 +29,9 @@ static uint32_t book_fire_texture;
 
 // Shaders
 static uint32_t g_buffer_shader_program;
+
+static uint32_t shadow_depth_shader_program;
+
 static uint32_t amb_light_shader_program;
 static uint32_t dir_light_shader_program;
 static uint32_t point_light_shader_program;
@@ -111,7 +117,7 @@ void game_launch(GLFWwindow *window) {
     );
 
     mesh_t monkey_mesh;
-    mesh_load(&monkey_mesh, "../res/models/monkey.obj");
+    mesh_load(&monkey_mesh, "../res/models/monkey_smooth.obj");
     create_model(
             (vec3) {0.f, 1.5f, 0.f},
             (vec3) {0.f, 0.f, 0.f},
@@ -120,8 +126,8 @@ void game_launch(GLFWwindow *window) {
             empty_texture
     );
 
-    create_amb_light((vec3) {0.3f, 0.3f, 0.3f});
-    create_dir_light((vec3) {rad(-50.f), rad(130.f), rad(0.f)}, (vec3) {0.3f, 0.3f, 0.3f});
+    create_amb_light((vec3) {0.4f, 0.4f, 0.4f});
+    create_dir_light((vec3) {rad(-50.f), rad(30.f), rad(0.f)}, (vec3) {0.8f, 0.8f, 0.8f});
     create_point_light((vec3) {5.f, 5.f, 0.f}, (vec3) {1.f, 0.f, 0.f});
     create_point_light((vec3) {-5.f, 5.f, 0.f}, (vec3) {0.f, 1.f, 0.f});
     create_point_light((vec3) {0.f, 5.f, -5.f}, (vec3) {0.f, 0.f, 1.f});
@@ -130,6 +136,11 @@ void game_launch(GLFWwindow *window) {
     g_buffer_shader_program = shader_create_program_f(
             "../res/shaders/g_buffer_vertex.glsl",
             "../res/shaders/g_buffer_fragment.glsl"
+    );
+
+    shadow_depth_shader_program = shader_create_program_f(
+            "../res/shaders/shadow_depth_vertex.glsl",
+            "../res/shaders/shadow_depth_fragment.glsl"
     );
 
     amb_light_shader_program = shader_create_program_f(
@@ -147,9 +158,12 @@ void game_launch(GLFWwindow *window) {
             "../res/shaders/point_light_fragment.glsl"
     );
 
+    depth_map = render_create_depth_map(2048);
+
     // Default shaders configuration
     render_setup_shader(amb_light_shader_program);
     render_setup_shader(dir_light_shader_program);
+    shader_set_int(dir_light_shader_program, "shadow_map", 3);
     render_setup_shader(point_light_shader_program);
 
     float last_time = (float) glfwGetTime();
@@ -191,8 +205,31 @@ void game_draw() {
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
 
+    // 0. Render depth of scene to texture (from light's perspective)
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(shadow_depth_shader_program);
+
+    array_t dir_lights;
+    array_create(&dir_lights);
+    EM_GET_COMPONENTS(dir_light_t, &dir_lights);
+    for (size_t i = 0; i < dir_lights.size; i++) {
+        dir_light_t *dir_light = array_get(&dir_lights, i);
+        dir_light_draw_shadow_map(dir_light, shadow_depth_shader_program, depth_map);
+    }
+    free(dir_lights.array);
+
+    glViewport(0, 0, 1280, 720);
+
     // 1. Geometry pass: render scene's geometry/color data into g-buffer
-    render_geometry_pass(g_buffer, g_buffer_shader_program, game_window);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.id);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(g_buffer_shader_program);
+    render_setup_cameras(g_buffer_shader_program, game_window);
+    render_draw_meshes(g_buffer_shader_program);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // 2. Lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the g-buffer's content.
     glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -200,6 +237,8 @@ void game_draw() {
 
     render_bind_g_buffer_to_shader(g_buffer, amb_light_shader_program);
     render_bind_g_buffer_to_shader(g_buffer, dir_light_shader_program);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, depth_map.texture);
     render_bind_g_buffer_to_shader(g_buffer, point_light_shader_program);
 
     glDisable(GL_DEPTH_TEST);
@@ -223,5 +262,6 @@ void game_destroy() {
     glDeleteProgram(amb_light_shader_program);
     glDeleteProgram(dir_light_shader_program);
     glDeleteProgram(point_light_shader_program);
+    glDeleteProgram(shadow_depth_shader_program);
     glDeleteProgram(g_buffer_shader_program);
 }

@@ -79,14 +79,33 @@ void render_setup_shader(uint32_t shader) {
     shader_set_int(shader, "g_albedo_spec", 2);
 }
 
-void render_geometry_pass(g_buffer_t g_buffer, uint32_t g_buffer_shader_program, GLFWwindow *window) {
-    glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.id);
-    glClearColor(0.f, 0.f, 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+depth_map_t render_create_depth_map(uint32_t size) {
+    depth_map_t depth_map;
+    depth_map.size = size;
+    glGenFramebuffers(1, &depth_map.id);
 
-    glUseProgram(g_buffer_shader_program);
+    // Create depth texture
+    glGenTextures(1, &depth_map.texture);
+    glBindTexture(GL_TEXTURE_2D, depth_map.texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, depth_map.size, depth_map.size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
-    // Camera setup
+    // Attach depth texture
+    glBindFramebuffer(GL_FRAMEBUFFER, depth_map.id);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_map.texture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return depth_map;
+}
+
+void render_setup_cameras(uint32_t shader, GLFWwindow *window) {
     array_t cameras;
     array_create(&cameras);
     EM_GET_COMPONENTS(camera_t, &cameras);
@@ -99,14 +118,15 @@ void render_geometry_pass(g_buffer_t g_buffer, uint32_t g_buffer_shader_program,
             transform_t *transform = EM_GET_COMPONENT(transform_t, camera->entity_id);
             camera_update(transform, window, view, projection);
 
-            shader_set_mat4(g_buffer_shader_program, "view", view);
-            shader_set_mat4(g_buffer_shader_program, "projection", projection);
+            shader_set_mat4(shader, "view", view);
+            shader_set_mat4(shader, "projection", projection);
             break;
         }
     }
     free(cameras.array);
+}
 
-    // Draw meshes
+void render_draw_meshes(uint32_t shader) {
     array_t renderers;
     array_create(&renderers);
     EM_GET_COMPONENTS(mesh_renderer_t, &renderers);
@@ -117,12 +137,10 @@ void render_geometry_pass(g_buffer_t g_buffer, uint32_t g_buffer_shader_program,
         transform_t *transform = EM_GET_COMPONENT(transform_t, renderer->entity_id);
         transform_update(transform, model);
 
-        shader_set_mat4(g_buffer_shader_program, "model", model);
+        shader_set_mat4(shader, "model", model);
         mesh_renderer_draw(renderer);
     }
     free(renderers.array);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void render_bind_g_buffer_to_shader(g_buffer_t g_buffer, uint32_t shader) {

@@ -11,6 +11,7 @@
 #include "ecs/components/amb_light.h"
 #include "ecs/components/dir_light.h"
 #include "ecs/components/point_light.h"
+#include "math/mat4.h"
 
 void create_spectator(vec3 position) {
     size_t spectator_id = em_create_entity();
@@ -78,13 +79,14 @@ void create_amb_light(vec3 color) {
 void create_dir_light(vec3 rotation, vec3 color) {
     size_t dir_light_id = em_create_entity();
     transform_t *light_transform = malloc(sizeof(transform_t));
-    vec3_copy(light_transform->position, (vec3) {0.f, 0.f, 0.f});
+    vec3_copy(light_transform->position, (vec3) {0.f, 6.f, 0.f});
     vec3_copy(light_transform->rotation, rotation);
     vec3_copy(light_transform->scale, (vec3) {1.f, 1.f, 1.f});
     EM_ADD_COMPONENT(transform_t, dir_light_id, light_transform);
 
     dir_light_t *dir_light = malloc(sizeof(dir_light_t));
     vec3_copy(dir_light->color, color);
+    mat4_identity(dir_light->light_space_mat);
     EM_ADD_COMPONENT(dir_light_t, dir_light_id, dir_light);
 }
 
