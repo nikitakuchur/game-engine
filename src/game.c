@@ -14,7 +14,6 @@
 #include "ecs/systems/spectator_sys.h"
 #include "entities.h"
 #include "ecs/components/dir_light.h"
-#include "ecs/systems/dir_light_sys.h"
 
 static GLFWwindow *game_window;
 static g_buffer_t g_buffer;
@@ -229,13 +228,8 @@ void game_draw() {
     render_bind_g_buffer_to_shader(g_buffer, dir_light_shader_program);
     render_bind_g_buffer_to_shader(g_buffer, point_light_shader_program);
 
-    // Ambient lights
     render_draw_amb_lights(amb_light_shader_program);
-
-    // Directional lights
     render_draw_dir_lights(dir_light_shader_program);
-
-    // Point lights
     render_draw_point_lights(point_light_shader_program);
 }
 
