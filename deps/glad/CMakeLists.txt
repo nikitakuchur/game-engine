@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Glad)
+project(glad)
 
-add_library(glad SHARED include/glad/glad.h src/glad.c)
+add_library(glad SHARED src/glad.c)
 target_include_directories(glad PUBLIC include/)
