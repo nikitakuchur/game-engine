@@ -29,12 +29,12 @@ add_executable(
 
 add_subdirectory(deps/glad)
 target_link_libraries(${CMAKE_PROJECT_NAME} glad)
-target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC glad/include)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE glad/include)
 
 add_subdirectory(deps/glfw)
 target_link_libraries(${CMAKE_PROJECT_NAME} glfw)
-target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC glfw/include)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE glfw/include)
 find_package(OpenGL REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} OpenGL::GL)
 
-target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC deps/stb_image/include)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE deps/stb_image/include)
