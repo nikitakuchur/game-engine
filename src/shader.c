@@ -5,18 +5,18 @@
 #include <malloc.h>
 
 uint32_t shader_create(uint32_t type, const char *source) {
-    uint32_t fragment = glCreateShader(type);
-    glShaderSource(fragment, 1, &source, NULL);
-    glCompileShader(fragment);
+    uint32_t shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
     // Check for shader compile errors
     int success;
     char log[512];
-    glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
-        glGetShaderInfoLog(fragment, 512, NULL, log);
+        glGetShaderInfoLog(shader, 512, NULL, log);
         printf("COMPILATION_FAILED\n %s", log);
     }
-    return fragment;
+    return shader;
 }
 
 uint32_t shader_load(uint32_t type, const char *filename) {
