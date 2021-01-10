@@ -36,4 +36,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME} glfw)
 find_package(OpenGL REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} OpenGL::GL)
 
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE deps/stb_image/include)
+add_subdirectory(deps/stb_image)
+target_link_libraries(${CMAKE_PROJECT_NAME} stb_image)
